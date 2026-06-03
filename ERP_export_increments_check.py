@@ -147,9 +147,9 @@ for filename in os.listdir(SCRIPT_LOG_FOLDER_PATH):
 # ----- keeping latest 200 rows in status file and size check csv-file -----
 
 df = pd.read_csv(SIZE_CHECK_TXT, sep='\t', dtype={'Timestamp': str, 'File': str, 'File_size': int})
-df.tail(200).to_csv(SIZE_CHECK_TXT, index=False)
+df.tail(200).to_csv(SIZE_CHECK_TXT, sep='\t', index=False)
 write_log(SCRIPT_LOG_FILE_PATH, "INFO", f"Size check TXT trimmed to latest 200 rows.")
 
 df = pd.read_csv(PROCESS_STATUS_FILE_PATH, sep='\t', dtype='str')
-df.tail(200).to_csv(PROCESS_STATUS_FILE_PATH, index=False)
+df.tail(200).to_csv(PROCESS_STATUS_FILE_PATH, sep='\t', index=False)
 write_log(SCRIPT_LOG_FILE_PATH, "INFO", f"{PROCESS_STATUS_FILE_PATH} trimmed to latest 200 rows.")
