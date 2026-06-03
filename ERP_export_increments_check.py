@@ -57,6 +57,9 @@ except:
 if len(calendar.loc[calendar['Date']==today_swe_format]) != 1:
     print('No defined tasks for today, {today_swe_format}')
     write_log(SCRIPT_LOG_FILE_PATH, "INFO", f"No checks scheduled for today, {today_swe_format}")
+    write_log(  PROCESS_STATUS_FILE_PATH,
+                'OK',
+                f'ERP export file size check')
     sys.exit()
 else:
     day_type = calendar.loc[calendar['Date']==today_swe_format, "Date_type"].item()
