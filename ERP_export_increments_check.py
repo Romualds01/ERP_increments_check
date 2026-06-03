@@ -26,9 +26,9 @@ closing_month_mm = one_month_ago.strftime("%m")  # returns mm-string like "01", 
 today_swe_format = datetime.now().strftime("%Y-%m-%d")  # returns date in Swedish format like "2024-04-25"
 now_stockholm = datetime.now(pytz.timezone('Europe/Stockholm')) # datetime object with current date and time in Stockholm timezone
 
-SCRIPT_LOG_FOLDER_PATH = r'\\fdm.se.telenor.net\FDM\PowerBI\ERP_Files\Oracle\_GL_export_check\logs'
-SCRIPT_LOG_FILE_PATH = Path(SCRIPT_LOG_FOLDER_PATH, now_stockholm.strftime("%y%m%d_%H%M%S") + 'gl_export_check_log_' + '.txt')
-SIZE_CHECK_CSV = r'\\fdm.se.telenor.net\FDM\PowerBI\ERP_Files\Oracle\_GL_export_check\GL_export_size_check.csv'
+SCRIPT_LOG_FOLDER_PATH = r'\\fdm.se.telenor.net\FDM\PowerBI\ERP_Files\Oracle\_GL_export_check\logs\\'
+SCRIPT_LOG_FILE_PATH = os.path.join(SCRIPT_LOG_FOLDER_PATH, now_stockholm.strftime("%y%m%d_%H%M%S") + 'gl_export_check_log_' + '.txt')
+SIZE_CHECK_TXT = r'\\fdm.se.telenor.net\FDM\PowerBI\ERP_Files\Oracle\_GL_export_check\GL_export_size_check.txt'
 FDM_CALENDAR_PATH = r'\\fdm.se.telenor.net\FDM\PowerBI\Planning_files\FDM_Import_Calendar\FDM_Import_Calendar.xlsx'
 GL_EXPORTS_FOLDER_PATH = r'\\fdm.se.telenor.net\FDM\PowerBI\ERP_Files\Oracle\O_GL'
 PROCESS_STATUS_FILE_PATH = r'\\fdm.se.telenor.net\FDM\PowerBI\Process_statuses\ERP_export_file_checks.txt'
@@ -89,20 +89,21 @@ else:
 
 # --- Get previous file size  ---
 
-size_df = pd.read_csv(  Path(SIZE_CHECK_CSV,
+size_df = pd.read_csv(  SIZE_CHECK_TXT,
                         sep='\t',
-                        dtype={'Timestamp': str, 'File': str, 'FileSize': int})) # fields: Timestamp	File	File_size
+                        dtype={'Timestamp': str, 'File': str, 'File_size': int}) # fields: Timestamp	File	File_size
 
 latest_entry = size_df.loc[size_df['File'] == gl_check_filename].tail(1)
 if not latest_entry.empty:
-    previous_filesize = latest_entry['FileSize'].values[0]
+    previous_filesize = latest_entry['File_size'].values[0]
     previous_timestamp = latest_entry['Timestamp'].values[0]
     write_log(SCRIPT_LOG_FILE_PATH, 'INFO', f"Previous file size for {gl_check_filename}: {previous_filesize} bytes as of {previous_timestamp}")
 else:
     previous_filesize = 0
+    previous_timestamp = 'N/A'
     write_log(SCRIPT_LOG_FILE_PATH, 'INFO', f"No previous file size entry found for {gl_check_filename}. Assuming 0 bytes.")
 
-write_log(SIZE_CHECK_CSV, gl_check_filename, current_filesize)
+write_log(SIZE_CHECK_TXT, gl_check_filename, current_filesize)
 
 if current_filesize > previous_filesize:
     print(f"File size check PASSED for {gl_check_filename}. Current size: {current_filesize} bytes, Previous size: {previous_filesize} bytes as of {previous_timestamp}.")
@@ -116,36 +117,35 @@ else:
     write_log(  PROCESS_STATUS_FILE_PATH,
                 'Not OK',
                 f'ERP export file size check')
+    attachments = [SCRIPT_LOG_FILE_PATH, SIZE_CHECK_TXT]
     mail_status = send_mail(MAIL_RECIPIENTS, 
                             f'WARNING! Check ERP export file size - no additional data since last check | {gl_check_filename}', 
                             f'Check file size of {gl_check_filename}. Current size: {current_filesize} bytes, Previous size: {previous_filesize} bytes as of {previous_timestamp}.',
-                            [SCRIPT_LOG_FILE_PATH,
-                             SIZE_CHECK_CSV])
-
+                            attachments)
 
 # ----- REMOVING OLD LOG FILES ON FDM SERVER -----
-if task_launch_validation_flag('Delete_old_log_files_on_FDM_server'):
-    cutoff_date_logs_on_fdm = datetime.now() - timedelta(days=65) # define cutoff date for log files on FDM server
+from datetime import timedelta
+cutoff_date_logs_on_fdm = datetime.now() - timedelta(days=65) # define cutoff date for log files on FDM server
 
-    for filename in os.listdir(SCRIPT_LOG_FOLDER_PATH):
-        file_path = os.path.join(SCRIPT_LOG_FOLDER_PATH, filename)
+for filename in os.listdir(SCRIPT_LOG_FOLDER_PATH):
+    file_path = os.path.join(SCRIPT_LOG_FOLDER_PATH, filename)
 
-        if os.path.isfile(file_path):
-            try:
-                modified_time = datetime.fromtimestamp(os.path.getmtime(file_path))
+    if os.path.isfile(file_path):
+        try:
+            modified_time = datetime.fromtimestamp(os.path.getmtime(file_path))
 
-                if modified_time < cutoff_date_logs_on_fdm:
-                    os.remove(file_path)
-                    write_log(SCRIPT_LOG_FILE_PATH, "INFO", f"Deleted old log file on FDM server: {file_path} with modified time {modified_time}")
-                    print(f"Deleted: {file_path}")
-            except Exception as e:
-                print(f"Could not delete {file_path}: {e}")
+            if modified_time < cutoff_date_logs_on_fdm:
+                os.remove(file_path)
+                write_log(SCRIPT_LOG_FILE_PATH, "INFO", f"Deleted old log file on FDM server: {file_path} with modified time {modified_time}")
+                print(f"Deleted: {file_path}")
+        except Exception as e:
+            print(f"Could not delete {file_path}: {e}")
 
 # ----- keeping latest 200 rows in status file and size check csv-file -----
 
-df = pd.read_csv(SIZE_CHECK_CSV, sep='\t', dtype={'Timestamp': str, 'File': str, 'FileSize': int})
-df.tail(200).to_csv(SIZE_CHECK_CSV, index=False)
-write_log(SCRIPT_LOG_FILE_PATH, "INFO", f"Size check CSV trimmed to latest 200 rows.")
+df = pd.read_csv(SIZE_CHECK_TXT, sep='\t', dtype={'Timestamp': str, 'File': str, 'File_size': int})
+df.tail(200).to_csv(SIZE_CHECK_TXT, index=False)
+write_log(SCRIPT_LOG_FILE_PATH, "INFO", f"Size check TXT trimmed to latest 200 rows.")
 
 df = pd.read_csv(PROCESS_STATUS_FILE_PATH, sep='\t', dtype='str')
 df.tail(200).to_csv(PROCESS_STATUS_FILE_PATH, index=False)
